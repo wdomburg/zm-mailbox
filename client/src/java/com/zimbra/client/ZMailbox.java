@@ -238,6 +238,9 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
      * for other use cases to avoid increasing memory footprint.
      */
     private String accountId = null;
+    /* As above, generally set "name" explicitly only when using another user's auth token */
+    private String name = null;
+    private String authName = null;
     private static final Pattern sAttachmentId = Pattern.compile("\\d+,'.*','(.*)'");
     private static final Pattern sCOMMA = Pattern.compile(",");
 
@@ -278,6 +281,7 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
     private Element mVoiceStorePrincipal;
     private long mSize;
     private boolean mNoTagCache;
+    private boolean alwaysRefreshFolders;
     private ZContactByPhoneCache mContactByPhoneCache;
     private final ZMailboxLock lock;
     private int lastChangeId = 0;
@@ -391,6 +395,7 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
         private String mDeviceId;
         private boolean mGenerateDeviceId;
         private SoapTransport.NotificationFormat notificationFormat = SoapTransport.NotificationFormat.DEFAULT;
+        private boolean alwaysRefreshFolders;
 
         public Options() {
         }
@@ -446,6 +451,9 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
 
         public ZAuthToken getAuthToken() { return mAuthToken; }
         public Options setAuthToken(ZAuthToken authToken) { mAuthToken = authToken;  return this; }
+
+        public boolean getAlwaysRefreshFolders() { return alwaysRefreshFolders; }
+        public Options setAlwaysRefreshFolders(boolean alwaysRefresh) { alwaysRefreshFolders = alwaysRefresh; return this; }
 
         public SoapTransport.NotificationFormat getNotificationFormat() {
             return notificationFormat;
@@ -549,8 +557,11 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
     private static class ItemCache {
         private final Map<String /* id */, ZItem> idMap;
         private final Map<String /* uuid */, ZItem> uuidMap;
+        private final ZMailbox zmbx;
+        private String acctId = null;
 
-        public ItemCache() {
+        public ItemCache(ZMailbox zmbx) {
+            this.zmbx = zmbx;
             idMap = new HashMap<String, ZItem>();
             uuidMap = new HashMap<String, ZItem>();
         }
@@ -565,14 +576,14 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
         }
 
         public void putWithId(String id, ZItem item) {
-            idMap.put(id, item);
+            idMap.put(key(id), item);
             if (item.getUuid() != null) {
                 uuidMap.put(item.getUuid(), item);
             }
         }
 
         public ZItem getById(String id) {
-            return idMap.get(id);
+            return idMap.get(key(id));
         }
 
         public ZItem getByUuid(String uuid) {
@@ -580,11 +591,27 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
         }
 
         public ZItem removeById(String id) {
-            ZItem removed = idMap.remove(id);
+            ZItem removed = idMap.remove(key(id));
             if (removed != null && removed.getUuid() != null) {
                 uuidMap.remove(removed.getUuid());
             }
             return removed;
+        }
+
+        private String key(String id) {
+            if (acctId == null) {  /* zmbox.getAccountId() may not succeed early on for on behalf of case */
+                try {
+                    acctId = zmbx.getAccountId();
+                } catch (Exception ex) {
+                }
+            }
+
+            try {
+                return ItemIdentifier.asSimplestString(id, acctId);
+            } catch (ServiceException e) {
+                // This can be raised when constructing an ItemIdentifier with a folder name; e.g., "INBOX"
+                return id;
+            }
         }
     }
 
@@ -642,6 +669,7 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
         }
         mNotificationFormat = options.getNotificationFormat();
         mNotifyPreference = SessionPreference.fromOptions(options);
+        alwaysRefreshFolders = options.getAlwaysRefreshFolders();
 
         mClientIp = options.getClientIp();
 
@@ -702,7 +730,7 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
     }
 
     private void initPreAuth(Options options) {
-        mItemCache = new ItemCache();
+        mItemCache = new ItemCache(this);
         setSoapURI(options);
         if (options.getDebugListener() != null) {
             mTransport.setDebugListener(options.getDebugListener());
@@ -1331,7 +1359,20 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
      * @throws com.zimbra.common.service.ServiceException on error
      */
     public String getName() throws ServiceException {
+        if (name != null) {
+            return name;
+        }
         return getAccountInfo(false).getName();
+    }
+
+    public ZMailbox setName(String name) {
+        this.name = name;
+        return this;
+    }
+
+    public ZMailbox setAuthName(String authName) {
+        this.authName = authName;
+        return this;
     }
 
     @Override
@@ -2339,8 +2380,8 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
         return doAction(actionEl);
     }
 
-    public void recordImapSession(int folderId) throws ServiceException {
-        RecordIMAPSessionRequest req = new RecordIMAPSessionRequest(folderId);
+    public void recordImapSession(ItemIdentifier folderId) throws ServiceException {
+        RecordIMAPSessionRequest req = new RecordIMAPSessionRequest(folderId.toString());
         RecordIMAPSessionResponse resp = invokeJaxb(req);
         String folderUuid = resp.getFolderUuid();
         int lastItemId = resp.getLastItemId();
@@ -2965,10 +3006,10 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
         item = mItemCache.getById(id);
         if (item == null) {
             /* sometimes when working on behalf of, we're getting just by item id but the
-             * cache has fully qualified keys.
+             * cache has fully qualified keys.  Or sometimes it is the other way around.
              */
             try {
-                String ident = new ItemIdentifier(id, this.getAccountId()).toString();
+                String ident = ItemIdentifier.asSimplestString(id, this.getAccountId());
                 if (!id.equals(ident)) {
                     item = mItemCache.getById(ident);
                 }
@@ -3990,8 +4031,12 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
 
     private void populateFolderCache() throws ServiceException {
         if (mUserRoot != null) {
+            if(alwaysRefreshFolders) {
+                noOp();
+            }
             return;
         }
+
         if (mNotifyPreference == null || mNotifyPreference == SessionPreference.full) {
             noOp();
             if (mUserRoot != null) {
@@ -5947,8 +5992,10 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
 
     @Override
     public String toString() {
+        String main = "";
+        String aux = authName != null ? " auth=" + authName : "";
         try {
-            return String.format("[ZMailbox %s]", getName());
+            main = getName();
         } catch (ServiceException e) {
             if (mTransport != null) {
                 String targ = mTransport.getTargetAcctName();
@@ -5956,11 +6003,11 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
                     targ = mTransport.getTargetAcctId();
                 }
                 if (targ != null) {
-                    return String.format("[ZMailbox targ=%s]", targ);
+                    main = "targ=" + targ;
                 }
             }
-            return String.format("[ZMailbox <unknown>]");
         }
+        return String.format("[ZMailbox %s%s]", main, aux);
     }
 
     @Override
@@ -6062,6 +6109,12 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
                 break;
             }
             folder = subfolder;
+            if (folder instanceof ZMountpoint) {
+                if ((i + 1) < segments.length) {
+                    unmatched = StringUtil.join("/", segments, i + 1, segments.length - (i + 1));
+                }
+                break;
+            }
         }
         return new Pair<ZFolder, String>(folder, unmatched);
     }
@@ -6079,19 +6132,13 @@ public class ZMailbox implements ToZJSONObject, MailboxStore {
     @Override
     public ExistingParentFolderStoreAndUnmatchedPart getParentFolderStoreAndUnmatchedPart(OpContext octxt, String path)
     throws ServiceException {
-        // Could have based this on getFolderByPathLongestMatch(ZFolder.ID_USER_ROOT, path);
-        // but that looks less efficient - for deep nesting, creating lots of ZFolders and throwing them away...
-        // This code borrowed (and moved) from ImapPath.getReferent()
         if (Strings.isNullOrEmpty(path)) {
             return new ExistingParentFolderStoreAndUnmatchedPart(getFolderById(ZFolder.ID_USER_ROOT), "");
         }
         try {
-            for (int index = path.length(); index != -1; index = path.lastIndexOf('/', index - 1)) {
-                ZFolder zfolder = getFolderByPath(path.substring(0, index));
-                if (zfolder != null) {
-                    String subpathRemote = path.substring(Math.min(path.length(), index + 1));
-                    return new ExistingParentFolderStoreAndUnmatchedPart(zfolder, subpathRemote);
-                }
+            Pair<ZFolder, String> pair = getFolderByPathLongestMatch(ZFolder.ID_USER_ROOT, path);
+            if (pair != null) {
+                return new ExistingParentFolderStoreAndUnmatchedPart(pair.getFirst(), pair.getSecond());
             }
         } catch (ServiceException e) {}
         return new ExistingParentFolderStoreAndUnmatchedPart(getFolderById(ZFolder.ID_USER_ROOT), path);
