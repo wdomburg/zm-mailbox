@@ -105,9 +105,9 @@ public class ModifyPrefsTest {
         Account acct1 = Provisioning.getInstance().get(Key.AccountBy.name, "test@zimbra.com");
         Mailbox mbox = MailboxManager.getInstance().getMailboxByAccount(acct1);
         acct1.setFeatureMailForwardingEnabled(true);
-        acct1.setFeatureMailForwardingVerificationEnabled(true);
+        acct1.setFeatureAddressVerificationEnabled(true);
         Assert.assertNull(acct1.getPrefMailForwardingAddress());
-        Assert.assertNull(acct1.getFeatureMailForwardingVerificationAddress());
+        Assert.assertNull(acct1.getFeatureAddressUnderVerification());
         ModifyPrefsRequest request = new ModifyPrefsRequest();
         Pref pref = new Pref(Provisioning.A_zimbraPrefMailForwardingAddress,
             "test1@somedomain.com");
@@ -117,12 +117,12 @@ public class ModifyPrefsTest {
         /*
          * Verify that the forwarding address is not directly stored into
          * 'zimbraPrefMailForwardingAddress' Instead, it is stored in
-         * 'zimbraFeatureMailForwardingVerificationAddress' till the time it
+         * 'zimbraFeatureAddressUnderVerification' till the time it
          * gets verification
          */
         Assert.assertNull(acct1.getPrefMailForwardingAddress());
         Assert.assertEquals("test1@somedomain.com",
-            acct1.getFeatureMailForwardingVerificationAddress());
+            acct1.getFeatureAddressUnderVerification());
         // Verify that the verification link is sent to forwarding address
         Integer itemId = mbox.getItemIds(null, Mailbox.ID_FOLDER_SENT).getIds(MailItem.Type.MESSAGE)
             .get(0);
@@ -136,10 +136,10 @@ public class ModifyPrefsTest {
          * address is directly stored into 'zimbraPrefMailForwardingAddress'
          */
         acct1.setPrefMailForwardingAddress(null);
-        acct1.setFeatureMailForwardingVerificationAddress(null);
-        acct1.setFeatureMailForwardingVerificationEnabled(false);
+        acct1.setFeatureAddressUnderVerification(null);
+        acct1.setFeatureAddressVerificationEnabled(false);
         new ModifyPrefs().handle(req, ServiceTestUtil.getRequestContext(mbox.getAccount()));
-        Assert.assertNull(acct1.getFeatureMailForwardingVerificationAddress());
+        Assert.assertNull(acct1.getFeatureAddressUnderVerification());
         Assert.assertEquals("test1@somedomain.com", acct1.getPrefMailForwardingAddress());
     }
 }
