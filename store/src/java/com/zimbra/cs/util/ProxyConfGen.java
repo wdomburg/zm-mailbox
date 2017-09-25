@@ -2401,6 +2401,8 @@ public class ProxyConfGen
         mDomainConfVars.put("web.add.headers.vhost", new AddHeadersVar("web.add.headers.vhost", rhdr,
                 "add_header directive for vhost web proxy"));
 
+        mConfVars.put("web.txid.header", new ProxyConfVar("web.txid.header", "zimbra_http_txid_header", "X-Transaction-ID", ProxyConfValueType.STRING, ProxyConfOverride.LOCALCONFIG, "transaction ID header name"));
+
         mLog.debug("Updating Default Domain Variable Map");
         try {
             updateDefaultDomainVars();

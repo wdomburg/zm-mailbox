@@ -1289,6 +1289,9 @@ public final class LC {
     public static final KnownKey conversation_ignore_maillist_prefix = KnownKey.newKey(true);
 
 
+    //TXID integration
+    public static final KnownKey zimbra_class_txidfactory = KnownKey.newKey("com.synacor.txid.Txid120Factory");
+    public static final KnownKey zimbra_http_txid_header = KnownKey.newKey("X-Transaction-ID");
 
     //EWS web service
     public static final KnownKey ews_service_wsdl_location =

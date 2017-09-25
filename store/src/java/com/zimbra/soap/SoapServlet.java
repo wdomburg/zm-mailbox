@@ -296,6 +296,8 @@ public class SoapServlet extends ZimbraServlet {
         context.put(SoapEngine.REQUEST_IP, remoteIp.getRequestIP());
         remoteIp.addToLoggingContext();
 
+        // Add TXID to logging context
+        ZimbraLog.addTxidToContext(req.getHeader(LC.zimbra_http_txid_header.value()));
         //checkAuthToken(req.getCookies(), context);
         context.put(SoapEngine.REQUEST_PORT, req.getServerPort());
         Element envelope = null;

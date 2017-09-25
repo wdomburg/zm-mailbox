@@ -31,6 +31,7 @@ import com.zimbra.common.localconfig.LC;
 import com.zimbra.common.service.ServiceException;
 import com.zimbra.common.util.ByteUtil;
 import com.zimbra.common.util.Constants;
+import com.zimbra.common.util.TxidUtil;
 import com.zimbra.common.util.ZimbraLog;
 import com.zimbra.cs.account.Account;
 import com.zimbra.cs.account.AccountServiceException;
@@ -77,6 +78,7 @@ abstract class Pop3Handler {
     Authenticator authenticator;
     private String clientAddress;
     private String origRemoteAddress;
+    private String connectionId;
 
     static final int STATE_AUTHORIZATION = 1;
     static final int STATE_TRANSACTION = 2;
@@ -92,6 +94,7 @@ abstract class Pop3Handler {
         this.config = config;
         startedTLS = config.isSslEnabled();
         throttle = ServerThrottle.getThrottle(config.getProtocol());
+        connectionId = TxidUtil.generateTxid();
     }
 
     abstract void startTLS() throws IOException;
@@ -111,6 +114,7 @@ abstract class Pop3Handler {
         ZimbraLog.clearContext();
         clientAddress = remoteAddr.getHostAddress();
         ZimbraLog.addIpToContext(clientAddress);
+        ZimbraLog.addConnectionIdToContext(connectionId);
 
         ZimbraLog.pop.info("connected");
         if (!config.isServiceEnabled()) {
@@ -127,6 +131,7 @@ abstract class Pop3Handler {
         ZimbraLog.addAccountNameToContext(accountName);
         ZimbraLog.addIpToContext(clientAddress);
         ZimbraLog.addOrigIpToContext(origRemoteAddress);
+        ZimbraLog.addConnectionIdToContext(connectionId);
     }
 
     boolean processCommand(String line) throws IOException {

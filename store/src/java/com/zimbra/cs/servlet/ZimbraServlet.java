@@ -474,9 +474,13 @@ public class ZimbraServlet extends HttpServlet {
         return remoteIp.getClientIP();
     }
 
+    // Add TXID as well as rIP
+    // FIXME: should either be seperate method or method should be renamed.
     public static void addRemoteIpToLoggingContext(HttpServletRequest req) {
         RemoteIP remoteIp = new RemoteIP(req, getTrustedIPs());
         remoteIp.addToLoggingContext();
+        String txid = req.getHeader(LC.zimbra_http_txid_header.value());
+		ZimbraLog.addTxidToContext(txid);
     }
 
     public static RemoteIP.TrustedIPs getTrustedIPs() {

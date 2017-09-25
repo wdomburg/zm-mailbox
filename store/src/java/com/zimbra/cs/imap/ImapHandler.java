@@ -131,6 +131,7 @@ abstract class ImapHandler {
     private String origRemoteIp;
     private String via;
     private String userAgent;
+    private String connectionId;
     boolean goodbyeSent;
     private Set<ImapExtension> activeExtensions;
     private final ServerThrottle reqThrottle;
@@ -145,6 +146,8 @@ abstract class ImapHandler {
         startedTLS = config.isSslEnabled();
         reqThrottle = ServerThrottle.getThrottle(config.getProtocol());
         commandThrottle = new ImapCommandThrottle(LC.imap_throttle_command_limit.intValue());
+		conntectionId = TxidUtil.generateTxid();
+
     }
 
     abstract void sendLine(String line, boolean flush) throws IOException;
@@ -211,6 +214,9 @@ abstract class ImapHandler {
         }
         if (origRemoteIp != null) {
             ZimbraLog.addOrigIpToContext(origRemoteIp);
+        }
+        if (connectionId != null) {
+            ZimbraLog.addConnectionIdToContext(connectionId);
         }
         if (via != null) {
             ZimbraLog.addViaToContext(via);

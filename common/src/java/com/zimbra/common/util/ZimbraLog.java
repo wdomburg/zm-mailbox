@@ -125,6 +125,11 @@ public final class ZimbraLog {
     private static final String C_OPROTO = "oproto";
 
     /**
+     * "txid" key for context.  For tracing a single connection through the logs.
+     */
+    private static final String C_TXID = "txid";
+
+    /**
      * the "zimbra.misc" logger. For all events that don't have a specific-catagory.
      */
     public static final Log misc = LogFactory.getLog("zimbra.misc");
@@ -598,6 +603,18 @@ public final class ZimbraLog {
         }
     }
 
+    public static String getFromContext(String key) {
+        if (key == null)
+            return null;
+
+        Map<String, String> contextMap = sContextMap.get();
+
+        if (contextMap == null)
+            return null;
+
+        return contextMap.get(key);
+    }
+
     /**
      * Updates the context string with the latest data in {@link #sContextMap}.
      */
@@ -687,6 +704,10 @@ public final class ZimbraLog {
         ZimbraLog.addToContext(C_OIP, ipAddress);
     }
 
+    public static String getOrigIpFromContext() {
+        return getFromContext(C_OIP);
+    }
+
     /**
      * Adds connection id to the current thread's logging context.
      */
@@ -741,6 +762,13 @@ public final class ZimbraLog {
      */
     public static void addOrigPortToContext(Integer port) {
         ZimbraLog.addToContext(C_OPORT, port != null ? port.toString() : "");
+    }
+
+    /**
+     * Adds txid to the current thread's logging context.
+     */
+    public static void addTxidToContext(String txid) {
+        ZimbraLog.addToContext(C_TXID, txid);
     }
 
     /**
