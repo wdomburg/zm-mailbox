@@ -35,6 +35,7 @@ public class PasswordUtil {
     public enum Scheme {
         // Hardcode digest lengths to avoid exception handling in constructor
         SSHA512 ("SHA-512", 64, 8),
+        SHA512  ("SHA-512", 64, 0),
         SSHA    ("SHA1",    20, 4),
         SHA1    ("SHA1",    20, 0),
         SHA     ("SHA1",    20, 0),
