@@ -319,6 +319,11 @@ public final class DebugConfig {
     public static int invalidPasswordCacheExpirationInMinutes =
         value("debug_invalid_password_cache_expiration_in_minutes", 2880);
 
+    /**
+     * "restricted_server_ldap_attributes" comma separated list of restricted server ldap attributes
+     */
+    public static final String restrictedServerLDAPAttributes = value ("restricted_server_ldap_attributes", "zimbraSSLPrivateKey");
+
     private static boolean value(String key, boolean defaultValue) {
         String value = LC.get(key);
         return value.isEmpty() ? defaultValue : Boolean.parseBoolean(value);
